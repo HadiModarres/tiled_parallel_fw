@@ -3,9 +3,9 @@
 
 using namespace std;
 
-#define MAX 2048
+#define MAX 16384
 #define NOT_CONNECTED -1
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 64
 
 int distance[MAX][MAX];
 
@@ -22,8 +22,40 @@ void Initialize() {
 }
 
 
-void FW(int i, int j, int BlockSize, int k) {
+void FW_parallel(int i, int j, int BlockSize, int k) {
+    if ((i>nodesCount)||(j>nodesCount))
+        return;
+    // printf("FW for i,j: %d,%d blocksize: %d k:%d\n",i,j,BlockSize,k);
 
+    int step = BLOCK_SIZE/omp_get_num_procs();
+
+    for (int k1 = k; k1 <= k + BlockSize; ++k1) {
+      //    printf("step: %d",step);
+        //  printf ("now computing: %d %d block:%d, k:%d",i,j,BlockSize,k);
+//#pragma omp parallel for schedule(static,step)
+        for (int i1 = i; i1 <= i + BlockSize - 1; ++i1) {
+            //  printf("i1: %d",i1);
+            if (distance[i1][k1] != NOT_CONNECTED) {
+                for (int j1 = j; j1 <= j + BlockSize - 1; ++j1) {
+                    //        printf("j1: %d",j1);
+
+                    if (distance[k1][j1] != NOT_CONNECTED &&
+                        (distance[i1][j1] == NOT_CONNECTED || distance[i1][k1] + distance[k1][j1] < distance[i1][j1])) {
+                        distance[i1][j1] = distance[i1][k1] + distance[k1][j1];
+                    }
+                }
+            }
+        }
+
+    }
+    //   printf ("computing finished: %d %d block:%d, k:%d\n",i,j,BlockSize,k);
+    //   printf("fw done\n");
+
+}
+
+void FW(int i, int j, int BlockSize, int k) {
+    if ((i>nodesCount)||(j>nodesCount))
+        return;
     // printf("FW for i,j: %d,%d blocksize: %d k:%d\n",i,j,BlockSize,k);
 
     for (int k1 = k; k1 <= k + BlockSize; ++k1) {
@@ -83,16 +115,23 @@ int main(int argc, char **argv) {
     }
 
     //   printf("done reading");
+
+    int stat_step = nodesCount/(BLOCK_SIZE*omp_get_num_procs());
+    printf("stat step: %d\n",stat_step);
+
     for (int k = 0; k < MAX / BLOCK_SIZE; k++) {
-        printf("big loop\n");
+        if (k*BLOCK_SIZE>nodesCount){
+            break;
+        }
+   //     printf("big loop\n");
 //#pragma omp parallel
 //        {
 
 //#pragma omp single
 
 
-        FW(BLOCK_SIZE * k, BLOCK_SIZE * k, BLOCK_SIZE, k * BLOCK_SIZE);
-#pragma omp parallel for schedule(static,4)
+        FW_parallel(BLOCK_SIZE * k, BLOCK_SIZE * k, BLOCK_SIZE, k * BLOCK_SIZE);
+#pragma omp parallel for schedule(static,stat_step)
         for (int i = 0; i < BLOCK_SIZE * k; i = i + BLOCK_SIZE) {
             //   printf("here1");
 
@@ -101,7 +140,7 @@ int main(int argc, char **argv) {
 
 
         }
-#pragma omp parallel for schedule(static,4)
+#pragma omp parallel for schedule(static,stat_step)
 
         for (int i = BLOCK_SIZE * (k + 1); i < MAX; i = i + BLOCK_SIZE) {
 
@@ -112,7 +151,7 @@ int main(int argc, char **argv) {
 
 
         }
-#pragma omp parallel for schedule(guided)
+#pragma omp parallel for schedule(static,stat_step)
 
         for (int j = 0; j < BLOCK_SIZE * k; j = j + BLOCK_SIZE) {
             //         printf("here3");
@@ -122,7 +161,7 @@ int main(int argc, char **argv) {
 
 
         }
-#pragma omp parallel for schedule(static,4)
+#pragma omp parallel for schedule(static,stat_step)
         for (int j = BLOCK_SIZE * (k + 1); j < MAX; j = j + BLOCK_SIZE) {
             //       printf("here4");
 
@@ -130,8 +169,8 @@ int main(int argc, char **argv) {
 
 
         }
-#pragma omp barrier
-#pragma omp parallel for collapse(2) schedule(static,4)
+//#pragma omp barrier
+#pragma omp parallel for schedule(static,stat_step)
         for (int i = 0; i < MAX; i = i + BLOCK_SIZE) {
             for (int j = 0; j < MAX; j = j + BLOCK_SIZE) {
                 if ((i != k * BLOCK_SIZE) && (j != k * BLOCK_SIZE)) {
@@ -144,7 +183,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
-#pragma omp barrier
+
 //    }
 
     }
