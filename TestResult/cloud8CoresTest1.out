@@ -1,0 +1,33 @@
+tiled_parallel_FW test on 1k vertices / 250k edges
+iiiinodes count read: 1000stat step: 1
+41
+total running time: 9.008168
+real	0m9.049s
+user	0m34.846s
+sys	0m0.548s
+tiled_parallel_FW test on 2k vertices / 1m edges
+iiiinodes count read: 2000Vertex index out of boundary.
+real	0m2.203s
+user	0m1.961s
+sys	0m0.217s
+tiled_parallel_FW test on 4k vertices / 4m edges
+iiiinodes count read: 4000stat step: 7
+18
+total running time: 278.221395
+real	4m38.257s
+user	23m59.868s
+sys	0m0.440s
+tiled_parallel_FW test on 6k vertices / 9m edges
+iiiinodes count read: 6000stat step: 11
+15
+total running time: 724.742278
+real	12m4.762s
+user	67m55.289s
+sys	0m0.745s
+tiled_parallel_FW test on 8k vertices / 16m edges
+iiiinodes count read: 8000stat step: 15
+11
+total running time: 1533.277835
+real	25m33.341s
+user	159m33.163s
+sys	0m1.494s
