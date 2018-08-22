@@ -1,17 +1,19 @@
 #include <cstdio>
 #include <omp.h>
+#include <cstdlib>
 
 using namespace std;
 
-#define MAX 16384
+#define MAX 10000
 #define NOT_CONNECTED -1
-#define BLOCK_SIZE 64
+int BLOCK_SIZE=29;
 
 int distance[MAX][MAX];
 
 int nodesCount;
 
 void Initialize() {
+    printf("nodes count: %d",nodesCount);
     for (int i = 0; i < MAX; ++i) {
         for (int j = 0; j < MAX; ++j) {
             distance[i][j] = NOT_CONNECTED;
@@ -20,6 +22,8 @@ void Initialize() {
         distance[i][i] = 0;
     }
 }
+
+
 
 
 void FW_parallel(int i, int j, int BlockSize, int k) {
@@ -81,78 +85,50 @@ void FW(int i, int j, int BlockSize, int k) {
 
 }
 
-
-int main(int argc, char **argv) {
-
-    int i = 2;
-    for (; i <= 5; ++i) {
-        printf("i");
-    }
-
-    if (argc != 2) {
-        printf("The path to the input file is not specified as a parameter.\n");
-        return -1;
-    }
-    FILE *in_file = fopen(argv[1], "r");
-    if (in_file == NULL) {
-        printf("Can't open file for reading.\n");
-        return -1;
-    }
-
-    double start = omp_get_wtime();
-    Initialize();
-
-    fscanf(in_file, "%d", &nodesCount);
-
-    printf("nodes count read: %d", nodesCount);
-    int a, b, c;
-    while (fscanf(in_file, "%d %d %d", &a, &b, &c) != EOF) {
-        if (a > nodesCount || b > nodesCount) {
-            printf("Vertex index out of boundary.");
-            return -1;
-        }
-        distance[a][b] = c;
-    }
-
-    //   printf("done reading");
-
+void parallel_diameter(){
     int stat_step = nodesCount/(BLOCK_SIZE*omp_get_num_procs());
     printf("stat step: %d\n",stat_step);
+
+    double timeBegin, timeEnd;
+    timeBegin = omp_get_wtime();
 
     for (int k = 0; k < MAX / BLOCK_SIZE; k++) {
         if (k*BLOCK_SIZE>nodesCount){
             break;
         }
-   //     printf("big loop\n");
+        //     printf("big loop\n");
 //#pragma omp parallel
 //        {
 
 //#pragma omp single
 
 
-        FW_parallel(BLOCK_SIZE * k, BLOCK_SIZE * k, BLOCK_SIZE, k * BLOCK_SIZE);
-#pragma omp parallel for schedule(static,stat_step)
+        FW(BLOCK_SIZE * k, BLOCK_SIZE * k, BLOCK_SIZE, k * BLOCK_SIZE);
+#pragma omp parallel for schedule(dynamic,stat_step)
         for (int i = 0; i < BLOCK_SIZE * k; i = i + BLOCK_SIZE) {
             //   printf("here1");
 
+//            if ((i>nodesCount)||(k*BLOCK_SIZE>nodesCount)){
+//                continue;
+//            }
 
             FW(i, k * BLOCK_SIZE, BLOCK_SIZE, k * BLOCK_SIZE);
 
 
         }
-#pragma omp parallel for schedule(static,stat_step)
-
+#pragma omp parallel for schedule(dynamic,stat_step)
         for (int i = BLOCK_SIZE * (k + 1); i < MAX; i = i + BLOCK_SIZE) {
 
 
             //        printf("here2");
-
+            if ((i>nodesCount)||(k*BLOCK_SIZE>nodesCount)){
+                continue;
+            }
             FW(i, k * BLOCK_SIZE, BLOCK_SIZE, k * BLOCK_SIZE);
 
 
         }
-#pragma omp parallel for schedule(static,stat_step)
-
+#pragma omp parallel for schedule(dynamic,stat_step)
         for (int j = 0; j < BLOCK_SIZE * k; j = j + BLOCK_SIZE) {
             //         printf("here3");
 
@@ -161,21 +137,25 @@ int main(int argc, char **argv) {
 
 
         }
-#pragma omp parallel for schedule(static,stat_step)
+#pragma omp parallel for schedule(dynamic,stat_step)
         for (int j = BLOCK_SIZE * (k + 1); j < MAX; j = j + BLOCK_SIZE) {
             //       printf("here4");
-
+            if ((j>nodesCount)||(k*BLOCK_SIZE>nodesCount)){
+                continue;
+            }
             FW(k * BLOCK_SIZE, j, BLOCK_SIZE, k * BLOCK_SIZE);
 
 
         }
 //#pragma omp barrier
-#pragma omp parallel for schedule(static,stat_step)
+#pragma omp parallel for schedule(dynamic,stat_step)
         for (int i = 0; i < MAX; i = i + BLOCK_SIZE) {
             for (int j = 0; j < MAX; j = j + BLOCK_SIZE) {
                 if ((i != k * BLOCK_SIZE) && (j != k * BLOCK_SIZE)) {
                     //             printf("here5");
-
+                    if ((i>nodesCount)||(j>nodesCount)){
+                        continue;
+                    }
 
                     FW(i, j, BLOCK_SIZE, k * BLOCK_SIZE);
 
@@ -212,10 +192,88 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("%d\n", diameter);
 
-    double end = omp_get_wtime();
-    printf("total running time: %f", (end - start));
+    timeEnd = omp_get_wtime();
+    printf("%d %.16g\n", diameter,(timeEnd-timeBegin));
+}
+
+int optimizeBlockSize(){
+    double minimumTime=30000;
+    int optimumBlockSize=-1;
+    nodesCount=2000;
+    for (int i=0;i<2000;i++){
+        for (int j=0;j<2000;j++){
+            distance[i][j]= rand()* 100;
+        }
+    }
+    for (int i=50;i>15;i--){
+        printf("now checking tile size: %d\n",i);
+        BLOCK_SIZE=i;
+        double avgTime=0 ;
+        for (int j=0;j<6;j++){
+            double start = omp_get_wtime();
+            parallel_diameter();
+            double end = omp_get_wtime();
+            avgTime+=(end-start);
+        }
+
+        if (avgTime<minimumTime){
+            minimumTime=avgTime ;
+            optimumBlockSize=i;
+            printf("new optimum block size: %d\n",optimumBlockSize);
+        }
+
+    }
+    printf("optimization done -> blocksize:%d\n",optimumBlockSize);
+
+
+}
+
+int main(int argc, char **argv) {
+
+    int i = 2;
+    for (; i <= 5; ++i) {
+        printf("i");
+    }
+
+    if (argc != 2) {
+        printf("The path to the input file is not specified as a parameter.\n");
+        return -1;
+    }
+    FILE *in_file = fopen(argv[1], "r");
+    if (in_file == NULL) {
+        printf("Can't open file for reading.\n");
+        return -1;
+    }
+
+//    double start = omp_get_wtime();
+    fscanf(in_file, "%d", &nodesCount);
+
+    Initialize();
+    optimizeBlockSize();
+
+    return 0;
+
+
+    printf("nodes count read: %d", nodesCount);
+    int a, b, c;
+  //  int count=0;
+    while (fscanf(in_file, "%d %d %d", &a, &b, &c) != EOF) {
+        if (a > nodesCount || b > nodesCount) {
+            printf("Vertex index out of boundary.");
+            return -1;
+        }
+        distance[a][b] = c;
+       // count++;
+       /// printf("read %d\n",count);
+    }
+
+       printf("done reading");
+
+        parallel_diameter();
+
+
+
     return 0;
 
 }
